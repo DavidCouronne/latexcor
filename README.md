@@ -18,8 +18,22 @@ LaTeX Compiler and File Manager - Automate your LaTeX workflow
 
 ## Installation
 
+Nécessite podman:
+
+Arch linux:
+
 ```bash
-pip install --upgrade latexcor
+sudo pacman -S podman
+```
+
+Nécessite uv:
+
+```bash
+sudo pacman -S uv
+```
+
+```bash
+uv tool install git+https://github.com/davidcouronne/latexcor.git --force
 ```
 
 ## Usage
