@@ -1,14 +1,13 @@
 import logging
-import os
+import platform
 import re
 import subprocess
 import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterator, List, Literal, Optional
+from typing import Iterator, List, Literal, Optional, Tuple, Dict
 
-from dockercor import get_image_info, run_docker_command
 from rich.console import Console
 from rich.panel import Panel
 from rich.progress import BarColumn, Progress, SpinnerColumn, TaskID, TextColumn
@@ -19,16 +18,6 @@ console = Console()
 logger = logging.getLogger(__name__)
 
 LatexEngine = Literal["xelatex", "pdflatex", "lualatex"]
-
-
-def get_current_user_info():
-    """Récupère l'UID et le GID de l'utilisateur courant."""
-    import pwd
-
-    uid = os.getuid()
-    gid = os.getgid()
-    user = pwd.getpwuid(uid).pw_name
-    return uid, gid, user
 
 
 @dataclass
@@ -76,7 +65,7 @@ class TexFile:
 
 
 class LatexCompiler:
-    """LaTeX compiler manager with progress tracking."""
+    """LaTeX compiler manager with progress tracking using Podman and Path."""
 
     # File extensions to clean up
     CLEAN_EXTENSIONS = {
@@ -152,6 +141,7 @@ class LatexCompiler:
                 for item in path.glob(clean_path):
                     if item.is_dir():
                         try:
+                            # Utilisation de rmdir sur l'objet Path directement
                             item.rmdir()
                             logger.debug(f"Directory deleted: {item}")
                         except Exception as e:
@@ -182,10 +172,10 @@ class LatexCompiler:
         progress: Optional[Progress] = None,
         task_id: Optional[TaskID] = None,
     ) -> bool:
-        """Compiles a LaTeX file with progress bar."""
-        # Conversion en Path si ce n'est pas déjà fait
+        """Compiles a LaTeX file with progress bar using Podman and pure Path operations."""
         file = Path(file).resolve()
         log_file = file.with_suffix(".log")
+        output_dir = file.parent
         compilation_progress = CompilationProgress()
 
         if progress is None:
@@ -197,74 +187,37 @@ class LatexCompiler:
                 console=console,
             )
 
-        # Sauvegarde et changement du répertoire de travail
-        output_dir = file.parent
-        current_dir = os.getcwd()
-        os.chdir(str(output_dir))
-
         try:
-            docker_ready = get_image_info("infocornouaille/tools:perso")
-        except Exception:
-            docker_ready = None
+            relative_file = file.name
 
-        try:
-            if docker_ready:
-                console.print("\n[bold green]Using docker infocornouaille/tools")
-                # Utilisation de Path pour gérer correctement les chemins
-                relative_file = file.name
-                current_path = os.path.abspath(os.getcwd())
-
-                # Adaptation du chemin pour Windows
-                if os.name == "nt":
-                    current_path = current_path.replace("\\", "/")
-                    if ":" in current_path:
-                        drive, path = current_path.split(":", 1)
-                        current_path = f"/{drive.lower()}{path}"
-                    cmd = [
-                        "docker",
-                        "run",
-                        "-i",
-                        "--rm",
-                        "-v",
-                        f"{current_path}:/data",
-                        "infocornouaille/tools:perso",
-                        latex_engine,
-                        "-interaction=nonstopmode",
-                        "-shell-escape",
-                        relative_file,
-                    ]
-                else:
-                    # Sous Linux, on ajoute les permissions utilisateur
-                    uid, gid, user = get_current_user_info()
-                    cmd = [
-                        "docker",
-                        "run",
-                        "-i",
-                        "--rm",
-                        # f"--user={uid}:{gid}",  # Exécuter en tant qu'utilisateur courant
-                        "-v",
-                        f"{current_path}:/data:Z",  # Ajouter explicitement les droits d'écriture
-                        # "-w",  # Définir le répertoire de travail
-                        # "/data:Z",
-                        "infocornouaille/tools:perso",
-                        latex_engine,
-                        "-interaction=nonstopmode",
-                        "-shell-escape",
-                        relative_file,
-                    ]
-
-                    # S'assurer que le répertoire courant a les bonnes permissions
-                    os.chmod(current_path, 0o755)
+            # Gestion propre du montage de volume selon l'OS sans altérer les objets Path
+            if platform.system() == "Windows":
+                # Conversion du chemin absolu Windows au format compatible conteneurs posix (ex: /c/Users/...)
+                drive = output_dir.drive.lower().replace(":", "")
+                pure_path = output_dir.as_posix().replace(output_dir.drive, "")
+                container_mount_path = f"/{drive}{pure_path}"
             else:
-                console.print("\n[bold green]Using system latex")
-                cmd = [
-                    latex_engine,
-                    "-interaction=nonstopmode",
-                    "-shell-escape",
-                    str(file.name),
-                ]
+                container_mount_path = output_dir.as_posix()
+                # Remplacement de os.chmod par la méthode native chmod de Path
+                try:
+                    output_dir.chmod(0o755)
+                except Exception as e:
+                    logger.warning(f"Could not change permissions on {output_dir}: {e}")
 
-            # console.print(f"[dim]Debug: Executing command: {' '.join(cmd)}[/]")
+            # Construction de la commande Podman
+            cmd = [
+                "podman",
+                "run",
+                "-i",
+                "--rm",
+                "-v",
+                f"{container_mount_path}:/data:Z",
+                "infocornouaille/tools:perso",
+                latex_engine,
+                "-interaction=nonstopmode",
+                "-shell-escape",
+                relative_file,
+            ]
 
             with progress:
                 if task_id is None:
@@ -278,6 +231,7 @@ class LatexCompiler:
                         completed=(pass_num - 1) * 50,
                     )
 
+                    # Utilisation de cwd=output_dir au lieu de os.chdir() global
                     process = subprocess.Popen(
                         cmd,
                         stdout=subprocess.PIPE,
@@ -285,13 +239,13 @@ class LatexCompiler:
                         text=True,
                         bufsize=1,
                         universal_newlines=True,
+                        cwd=output_dir,
                     )
 
                     while True:
                         line = process.stdout.readline()
                         if not line and process.poll() is not None:
                             break
-                        # console.print(f"[dim]{line.strip()}[/]")  # Debug output
                         if compilation_progress.update(line):
                             progress.update(
                                 task_id, completed=((pass_num - 1) * 50) + 25
@@ -314,8 +268,7 @@ class LatexCompiler:
             return False
 
         finally:
-            os.chdir(current_dir)
-            cls.clean_aux(file.parent)
+            cls.clean_aux(output_dir)
 
     @classmethod
     def compile_all(
@@ -343,88 +296,68 @@ class LatexCompiler:
 
     @classmethod
     def watch(cls, path_to_watch: Path, latex_engine: LatexEngine = "xelatex") -> None:
-        """
-        Watch LaTeX files for changes and compile them.
-        Only watches the current directory and immediate subdirectories.
-        Implements a 10-second delay between compilations.
-        """
+        """Watch LaTeX files for changes and compile them."""
+        # Mutation du paramètre initial en Path propre
+        path_to_watch = Path(path_to_watch).resolve()
 
         class DepthLimitedLatexHandler(FileSystemEventHandler):
             def __init__(self):
-                self.last_modified = (
-                    {}
-                )  # Dictionary to track last compilation time per file
-                self.compilation_lock = (
-                    {}
-                )  # Dictionary to track if compilation is pending per file
+                self.last_modified = {}
+                self.compilation_lock = {}
 
             def should_process_path(self, file_path: str) -> bool:
-                """
-                Check if the file path should be processed based on depth and extension.
-                """
                 try:
                     path = Path(file_path)
-                    watch_path = Path(path_to_watch)
 
                     if not path.suffix == ".tex":
                         return False
 
                     try:
-                        path.relative_to(watch_path)
+                        path.relative_to(path_to_watch)
                     except ValueError:
                         return False
 
-                    depth = len(path.relative_to(watch_path).parts)
-                    return (
-                        depth <= 2
-                    )  # 1 for same directory, 2 for immediate subdirectory
+                    depth = len(path.relative_to(path_to_watch).parts)
+                    return depth <= 2
 
                 except Exception as e:
                     logger.error(f"Error checking path depth: {e}")
                     return False
 
             def schedule_compilation(self, path: Path):
-                """
-                Schedule a compilation after the cooldown period.
-                """
-
                 def delayed_compile():
                     time.sleep(
-                        max(
-                            0, 10 - (time.time() - self.last_modified.get(str(path), 0))
-                        )
+                        max(0, 10 - (time.time() - self.last_modified.get(path, 0)))
                     )
-                    if path.is_file():  # Ensure file still exists
+                    if path.is_file():
                         if TexFile(
                             path, path.parent, path.stat().st_mtime
                         ).is_main_file:
                             relative_path = path.relative_to(path_to_watch)
                             console.print(f"\n[bold blue]Compiling:[/] {relative_path}")
                             cls.compile_latex(path, latex_engine)
-                        self.compilation_lock[str(path)] = False
+                        self.compilation_lock[path] = False
 
-                if not self.compilation_lock.get(str(path), False):
-                    self.compilation_lock[str(path)] = True
+                if not self.compilation_lock.get(path, False):
+                    self.compilation_lock[path] = True
                     threading.Thread(target=delayed_compile, daemon=True).start()
 
             def on_modified(self, event):
                 if not event.is_directory and self.should_process_path(event.src_path):
                     path = Path(event.src_path)
                     current_time = time.time()
-                    file_path = str(path)
 
-                    if current_time - self.last_modified.get(file_path, 0) >= 10:
-                        self.last_modified[file_path] = current_time
+                    if current_time - self.last_modified.get(path, 0) >= 10:
+                        self.last_modified[path] = current_time
                         self.schedule_compilation(path)
                     else:
                         remaining = 10 - (
-                            current_time - self.last_modified.get(file_path, 0)
+                            current_time - self.last_modified.get(path, 0)
                         )
                         logger.debug(
                             f"Skipping compilation, {remaining:.1f} seconds remaining in cooldown"
                         )
 
-        # Set up the observer
         observer = Observer()
         handler = DepthLimitedLatexHandler()
         observer.schedule(handler, str(path_to_watch), recursive=True)
