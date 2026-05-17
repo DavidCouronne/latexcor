@@ -13,7 +13,6 @@ from .file_manager import FileManager
 from .latex_compiler import LatexCompiler
 from .__version__ import __version__
 
-
 console = Console()
 
 
