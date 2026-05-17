@@ -6,8 +6,7 @@ from latexcor.mermaid_processor import MermaidProcessor
 def test_process_mermaid(tmp_path, monkeypatch):
     # Create a temporary .tex file with a Mermaid diagram
     file_path = tmp_path / "test.tex"
-    file_path.write_text(
-        """
+    file_path.write_text("""
 \\documentclass{article}
 \\begin{document}
 \\begin{mermaid}
@@ -18,8 +17,7 @@ graph TD;
     C-->D;
 \\end{mermaid}
 \\end{document}
-"""
-    )
+""")
 
     # Mock the mermaid_to_image method
     def mock_mermaid_to_image(mermaid_code, output_file):
