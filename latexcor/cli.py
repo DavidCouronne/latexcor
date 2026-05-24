@@ -2,16 +2,14 @@ from enum import Enum
 from pathlib import Path
 from typing import Optional
 
-import tomli
 import typer
-
 from rich.console import Console
 
 from . import __version__
+from .__version__ import __version__
 from .encoding_converter import EncodingConverter
 from .file_manager import FileManager
 from .latex_compiler import LatexCompiler
-from .__version__ import __version__
 
 console = Console()
 
