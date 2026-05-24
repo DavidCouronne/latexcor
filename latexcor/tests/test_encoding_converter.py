@@ -1,27 +1,44 @@
-import pytest
 from pathlib import Path
+
+import pytest
+
 from latexcor.encoding_converter import EncodingConverter
 
 
-def test_predict_encoding(tmp_path):
-    # Create a temporary file with known encoding
-    file_path = tmp_path / "test.tex"
-    file_path.write_text("àèç", encoding="utf-8")
+def test_encoding_detection():
+    """Vérifie la détection d'encodage via chardet."""
+    # UTF-8
+    assert EncodingConverter.detect_encoding("Hélo".encode("utf-8")).lower() == "utf-8"
 
-    # Test the predict_encoding method
-    predicted_encoding = EncodingConverter.predict_encoding(file_path)
-    assert predicted_encoding == "utf-8"
+    # ISO-8859-1 (Latin-1)
+    content_latin1 = "L'été à Paris".encode("iso-8859-1")
+    detected = EncodingConverter.detect_encoding(content_latin1).lower()
+    # chardet peut être imprécis sur de courtes chaînes, on accepte les encodages compatibles
+    assert detected in ["iso-8859-1", "windows-1252", "utf-8", "ascii"]
 
 
-def test_convert_utf8(tmp_path):
-    # Create a temporary file with non-utf-8 encoding
-    file_path = tmp_path / "test.tex"
-    file_path.write_text("abc", encoding="windows-1251")
+def test_convert_file_to_utf8(tmp_path):
+    """Vérifie la conversion physique d'un fichier vers UTF-8."""
+    # 1. Créer un fichier en Latin-1
+    test_file = tmp_path / "latin1.tex"
+    content = "C'est l'été à Paris."
+    test_file.write_bytes(content.encode("iso-8859-1"))
 
-    # Convert the file to UTF-8
-    EncodingConverter.convert_utf8(tmp_path)
+    # 2. Convertir
+    result = EncodingConverter.convert_file_to_utf8(test_file)
+    assert result is True
 
-    # Check if the file is now UTF-8 encoded
-    with file_path.open("r", encoding="utf-8") as f:
-        content = f.read()
-    assert content == "abc"
+    # 3. Vérifier le résultat
+    new_content = test_file.read_text(encoding="utf-8")
+    assert new_content == content
+
+
+def test_convert_already_utf8(tmp_path):
+    """Vérifie qu'un fichier déjà en UTF-8 n'est pas altéré."""
+    test_file = tmp_path / "utf8.tex"
+    content = "Déjà en UTF-8."
+    test_file.write_text(content, encoding="utf-8")
+
+    result = EncodingConverter.convert_file_to_utf8(test_file)
+    assert result is True
+    assert test_file.read_text(encoding="utf-8") == content

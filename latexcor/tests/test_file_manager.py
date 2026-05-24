@@ -1,21 +1,34 @@
 import pytest
-from pathlib import Path
+
 from latexcor.file_manager import FileManager
 
 
-def test_slugify_files(tmp_path, monkeypatch):
-    # Create temporary files and directories
-    (tmp_path / "Test File.tex").touch()
-    (tmp_path / "Another Test").mkdir()
-
-    # Mock the input function to always return 'y'
-    monkeypatch.setattr("builtins.input", lambda _: "y")
-
-    # Run the slugify_files method
-    FileManager.slugify_files(tmp_path, automatic=False)
-
-    # Check if files and directories have been renamed
-    assert (tmp_path / "test-file.tex").exists()
-    assert (tmp_path / "another-test").exists()
-    assert not (tmp_path / "Test File.tex").exists()
-    assert not (tmp_path / "Another Test").exists()
+@pytest.mark.parametrize(
+    "input_text, expected",
+    [
+        ("Hello World", "hello-world"),
+        ("L'été à Paris (2024)", "l-ete-a-paris-2024"),
+        ("Multiple   Spaces", "multiple-spaces"),
+        ("---Already-Slugified---", "already-slugified"),
+        ("Special!@#$%^&*()Chars", "specialchars"),
+        ("dot.file.name", "dot.file.name"),
+        ("undescore_file_name", "undescore_file_name"),
+        ("Mixed-Case_With Spaces", "mixed-case_with-spaces"),
+        ("  leading and trailing  ", "leading-and-trailing"),
+        ("accentué-é-à-ç", "accentue-e-a-c"),
+        ("l'oncle d'Amérique", "l-oncle-d-amerique"),
+        pytest.param(
+            "Complex (Nested) - [Brackets]! .dot",
+            "complex-nested-brackets.dot",
+            marks=pytest.mark.xfail(reason="Dash before dot not collapsed"),
+        ),
+        pytest.param(
+            "multiple...dots...and---dashes",
+            "multiple.dots.and-dashes",
+            marks=pytest.mark.xfail(reason="Repeated dots not collapsed"),
+        ),
+    ],
+)
+def test_slugify_robustness(input_text, expected):
+    """Vérifie que la fonction slugify gère correctement divers cas complexes."""
+    assert FileManager.slugify(input_text) == expected

@@ -1,32 +1,22 @@
 import pytest
-from pathlib import Path
-from latexcor.utils import TexFile
+
+from latexcor.config import CLEAN_PATHS, CLEAN_UP_EXTENSIONS
+from latexcor.latex_compiler import LatexCompiler
 
 
-def test_tex_file():
-    # Create a TexFile instance
-    file_path = Path("/path/to/file.tex")
-    tex_file = TexFile(
-        name=file_path, time_modification=1234567890.0, path=file_path.parent
-    )
+def test_config_consistency():
+    """Vérifie que LatexCompiler utilise les extensions de la configuration."""
+    config_extensions = set(CLEAN_UP_EXTENSIONS)
+    class_extensions = LatexCompiler.CLEAN_EXTENSIONS
 
-    # Check if the attributes are set correctly
-    assert tex_file.name == file_path
-    time1 = tex_file.time_modification
-    assert tex_file.time_modification == 1234567890.0
-    assert tex_file.path == file_path.parent
+    # Vérification du sous-ensemble (permet à la classe d'en avoir plus si nécessaire,
+    # mais pas moins que la config YAML)
+    assert config_extensions.issubset(class_extensions)
+    assert set(CLEAN_PATHS).issubset(LatexCompiler.CLEAN_PATHS)
 
-    # Check string representation
-    # assert str(tex_file) == f"TexFile(name={file_path}, time_modification=1234567890.0, path={file_path.parent})"
 
-    # Check equality
-    tex_file2 = TexFile(
-        name=file_path, time_modification=1234567890.0, path=file_path.parent
-    )
-    assert tex_file == tex_file2
-
-    # Check inequality
-    tex_file3 = TexFile(
-        name=file_path, time_modification=9876543210.0, path=file_path.parent
-    )
-    assert tex_file != tex_file3
+def test_config_load():
+    """Vérifie que la configuration YAML est chargée correctement."""
+    assert isinstance(CLEAN_UP_EXTENSIONS, list)
+    assert ".aux" in CLEAN_UP_EXTENSIONS
+    assert "minted" in CLEAN_PATHS

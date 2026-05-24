@@ -1,5 +1,7 @@
-import pytest
 from pathlib import Path
+
+import pytest
+
 from latexcor.mermaid_processor import MermaidProcessor
 
 
