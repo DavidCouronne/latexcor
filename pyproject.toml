@@ -3,23 +3,24 @@ name = "latexcor"
 version = "0.3.4"
 description = "Outil CLI pour la gestion de fichiers LaTeX"
 readme = "README.md"
-requires-python = ">=3.11"
+# On monte la version minimale à 3.13 pour profiter des dernières optimisations et d'un AST stable
+requires-python = ">=3.13"
 license = { text = "MIT" }
 authors = [
     { name = "infocornouaille", email = "90894019+infocornouaille@users.noreply.github.com" }
 ]
 dependencies = [
     "chardet>=7.4.3",
-    "tomli>=2.4.1",
+    # 'tomli' a été supprimé ici car intégré nativement via 'import tomllib' en Python 3.11+
     "typer>=0.25.1",
     "rich>=13.0.0",
     "watchdog>=4.0.0",
+    "pyyaml>=6.0.3",
 ]
 
 [project.scripts]
 latexcor = "latexcor.cli:main"
 
-# Nouvelle syntaxe standardisée à la place de [tool.uv]
 [dependency-groups]
 dev = [
     "black>=24.10.0",
@@ -30,3 +31,10 @@ dev = [
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+# Résout ton warning Black en forçant la cible à s'aligner sur ton interpréteur
+[tool.black]
+target-version = ['py313']
+
+[tool.isort]
+profile = "black"
