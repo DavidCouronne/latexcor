@@ -1,7 +1,8 @@
-from pathlib import Path
-import chardet
-from typing import Optional
 import logging
+from pathlib import Path
+from typing import Optional
+
+import chardet
 from rich.console import Console
 
 console = Console()
@@ -14,25 +15,38 @@ class EncodingConverter:
     @staticmethod
     def detect_encoding(content: bytes) -> str:
         """
-        Detect the encoding of file content.
-        Returns the detected encoding or 'utf-8' as fallback.
+        Detect the encoding of file content with a robust fallback strategy.
+        1. Try UTF-8 first (it's the most common and safest)
+        2. Use chardet for other encodings
+        3. Fallback to latin-1 if confidence is low
         """
+        # Try UTF-8 first
+        try:
+            content.decode("utf-8")
+            return "utf-8"
+        except UnicodeDecodeError:
+            pass
+
         try:
             result = chardet.detect(content)
             encoding = result["encoding"] if result and result["encoding"] else "utf-8"
             confidence = result.get("confidence", 0) if result else 0
 
-            # If confidence is low, default to utf-8
+            # If confidence is low, try latin-1 as it's common for French/Western European
             if confidence < 0.7:
                 logger.warning(
-                    f"Low confidence ({confidence}) in detected encoding: {encoding}"
+                    f"Low confidence ({confidence}) in detected encoding: {encoding}. Trying latin-1 fallback."
                 )
-                return "utf-8"
+                try:
+                    content.decode("iso-8859-1")
+                    return "iso-8859-1"
+                except UnicodeDecodeError:
+                    return "utf-8"
 
             return encoding
         except Exception as e:
             logger.error(f"Error detecting encoding: {e}")
-            return "utf-8"
+            return "iso-8859-1"
 
     @classmethod
     def convert_file_to_utf8(cls, file_path: Path) -> bool:
