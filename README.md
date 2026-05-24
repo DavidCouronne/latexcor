@@ -25,6 +25,12 @@ Arch linux:
 ```bash
 sudo pacman -S podman
 ```
+Nécessite l'image docker:
+
+``bash
+podman pull docker.io/infocornouaille/tools:perso
+````
+
 
 Nécessite uv:
 
