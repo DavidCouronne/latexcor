@@ -19,5 +19,8 @@ clean_up_extensions:
   - .barb
 
 clean_paths:
-  - minted
-  - mermaid
+  - "_minted-*"
+  - "_markdown_*"
+  - "_preview_*"
+  - "minted"
+  - "mermaid"
