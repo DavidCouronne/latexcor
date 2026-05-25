@@ -1,8 +1,9 @@
+import logging
 import re
+import unicodedata
 from pathlib import Path
 from typing import Set
-import unicodedata
-import logging
+
 from rich.console import Console
 from rich.prompt import Confirm
 
@@ -25,11 +26,15 @@ class FileManager:
         # Normalize unicode characters
         text = unicodedata.normalize("NFKD", text)
 
-        # Keep only ascii characters and preserved chars
+        # Treat apostrophes as word separators by replacing them with spaces
+        text = text.replace("'", " ")
+
+        # Keep only ascii characters, preserved chars and spaces (to be replaced later)
         text = "".join(
             c
             for c in text
-            if c.isascii() and (c.isalnum() or c in FileManager.PRESERVED_CHARS)
+            if c.isascii()
+            and (c.isalnum() or c in FileManager.PRESERVED_CHARS or c.isspace())
         ).strip()
 
         # Replace spaces and repeated dashes with single dash
@@ -63,6 +68,16 @@ class FileManager:
 
         # Create new path with slugified name
         new_path = file_path.with_name(new_stem + suffix)
+
+        # Handle naming conflicts
+        if new_path.exists() and new_path.resolve() != file_path.resolve():
+            logger.warning(
+                f"Cannot rename {file_path.name} to {new_path.name}: target already exists."
+            )
+            console.print(
+                f"[bold red]Conflict:[/] {new_path.name} already exists. Skipping..."
+            )
+            return file_path
 
         try:
             # Show the proposed change
