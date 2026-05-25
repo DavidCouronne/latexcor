@@ -2,6 +2,7 @@ import pytest
 from pathlib import Path
 from latexcor.file_manager import FileManager
 from latexcor.latex_compiler import LatexCompiler
+from latexcor.utils import TexFile
 
 def test_extract_error_context_robustness(tmp_path):
     """Vérifie que extract_error_context capture correctement différents formats d'erreurs."""
@@ -60,3 +61,37 @@ def test_slugify_success(tmp_path):
     assert new_path.name == "hello-world.tex"
     assert not file1.exists()
     assert new_path.exists()
+
+def test_is_main_file_included_chapter(tmp_path):
+    """Un fichier inclus via include ne doit pas être compilé."""
+    chapter = tmp_path / "intro.tex"
+    chapter.write_text(
+        "\\section{Introduction}\nSome content here.\n" * 50
+    )
+    tf = TexFile(chapter, tmp_path, chapter.stat().st_mtime)
+    assert tf.is_main_file is False  # pas de \documentclass ni \end{document}
+
+def test_is_main_file_standalone(tmp_path):
+    """Un fichier standalone avec son propre documentclass doit être compilé."""
+    standalone = tmp_path / "diagram.tex"
+    standalone.write_text(
+        "\\documentclass[tikz]{standalone}\n"
+        "\\begin{document}\n"
+        "\\begin{tikzpicture}\\end{tikzpicture}\n"
+        "\\end{document}\n"
+    )
+    tf = TexFile(standalone, tmp_path, standalone.stat().st_mtime)
+    assert tf.is_main_file is True
+
+def test_is_main_file_large_document(tmp_path):
+    """Régression : end{document} doit être trouvé même sur un grand fichier."""
+    padding = "\\section{test} some content\n" * 200  # >> 2048 chars
+    large_main = tmp_path / "main.tex"
+    large_main.write_text(
+        "\\documentclass{article}\n"
+        "\\begin{document}\n"
+        + padding +
+        "\\end{document}\n"
+    )
+    tf = TexFile(large_main, tmp_path, large_main.stat().st_mtime)
+    assert tf.is_main_file is True  # échoue sur la version "fonctionnelle"
