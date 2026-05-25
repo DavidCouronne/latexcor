@@ -5,7 +5,6 @@ from typing import Optional
 import typer
 from rich.console import Console
 
-from . import __version__
 from .__version__ import __version__
 from .encoding_converter import EncodingConverter
 from .file_manager import FileManager
@@ -83,9 +82,20 @@ def recompile(
         "-c",
         help="Confirm before recompiling each file",
     ),
+    shell_escape: bool = typer.Option(
+        False,
+        "--shell-escape",
+        "-s",
+        help="Allow LaTeX to run external commands (Warning: Security Risk)",
+    ),
 ):
     """Recompile all LaTeX files."""
     work_path = path or get_current_path()
+
+    if shell_escape:
+        console.print(
+            "[bold yellow]Warning:[/] -shell-escape is enabled. This allows LaTeX to run external commands."
+        )
 
     tex_files = [
         tex_file.name
@@ -101,7 +111,7 @@ def recompile(
                 )
                 if not should_compile:
                     continue
-            LatexCompiler.compile_latex(file, engine.value)
+            LatexCompiler.compile_latex(file, engine.value, shell_escape=shell_escape)
 
     LatexCompiler.clean_aux(work_path)
     console.print("[bold green]Recompilation complete[/]")
@@ -171,11 +181,23 @@ def watch(
         dir_okay=True,
         file_okay=False,
     ),
+    shell_escape: bool = typer.Option(
+        False,
+        "--shell-escape",
+        "-s",
+        help="Allow LaTeX to run external commands (Warning: Security Risk)",
+    ),
 ):
     """Watch directory and compile LaTeX files on changes."""
     work_path = path or get_current_path()
+
+    if shell_escape:
+        console.print(
+            "[bold yellow]Warning:[/] -shell-escape is enabled. This allows LaTeX to run external commands."
+        )
+
     console.print(f"[bold blue]Starting watch mode in[/] {work_path}")
-    LatexCompiler.watch(work_path, engine.value)
+    LatexCompiler.watch(work_path, engine.value, shell_escape=shell_escape)
 
 
 def main() -> None:
