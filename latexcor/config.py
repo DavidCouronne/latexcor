@@ -13,3 +13,4 @@ config = load_config()
 
 CLEAN_UP_EXTENSIONS = config["clean_up_extensions"]
 CLEAN_PATHS = config["clean_paths"]
+WATCH_COOLDOWN = 2
